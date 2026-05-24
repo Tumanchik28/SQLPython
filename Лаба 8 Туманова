@@ -1,0 +1,239 @@
+import sqlite3
+import numpy as np
+import matplotlib.pyplot as plt
+from collections import Counter
+
+# Лабораторная работа №8
+# Выявление аномалий
+
+conn = sqlite3.connect('database.db')
+cursor = conn.cursor()
+print('=== ЛАБОРАТОРНАЯ РАБОТА №8 ===')
+
+# 1. Аномалии по зарплатам
+cursor.execute('SELECT id, first_name, last_name, profession, salary FROM Users')
+users_salary = cursor.fetchall()
+salaries = [row[4] for row in users_salary]
+Q1 = np.percentile(salaries, 25)
+Q3 = np.percentile(salaries, 75)
+IQR = Q3 - Q1
+lower_salary = Q1 - 1.5 * IQR
+upper_salary = Q3 + 1.5 * IQR
+salary_anomalies = [row for row in users_salary if row[4] < lower_salary or row[4] > upper_salary]
+print('\n1) Аномалии по зарплатам')
+print(f'Q1 = {Q1:.2f}, Q3 = {Q3:.2f}, IQR = {IQR:.2f}')
+print(f'Нижняя граница = {lower_salary:.2f}')
+print(f'Верхняя граница = {upper_salary:.2f}')
+print('Найденные аномалии:')
+for row in salary_anomalies:
+    print(row)
+plt.figure(figsize=(12, 6))
+plt.hist(salaries, bins=15, edgecolor='black', alpha=0.7)
+plt.axvline(lower_salary, linestyle='--', linewidth=2, label='Нижняя граница')
+plt.axvline(upper_salary, linestyle='--', linewidth=2, label='Верхняя граница')
+plt.axvline(np.mean(salaries), linestyle='-', linewidth=2, label='Среднее')
+plt.xlabel('Зарплата')
+plt.ylabel('Количество пользователей')
+plt.title('Аномалии в зарплатах пользователей')
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+# 2. Аномалии по возрасту
+cursor.execute('SELECT id, first_name, last_name, age, city FROM Users')
+users_age = cursor.fetchall()
+ages = [row[3] for row in users_age]
+Q1_age = np.percentile(ages, 25)
+Q3_age = np.percentile(ages, 75)
+IQR_age = Q3_age - Q1_age
+lower_age = Q1_age - 1.5 * IQR_age
+upper_age = Q3_age + 1.5 * IQR_age
+age_anomalies = [row for row in users_age if row[3] < lower_age or row[3] > upper_age]
+print('\n2) Аномалии по возрасту')
+print(f'Q1 = {Q1_age:.2f}, Q3 = {Q3_age:.2f}, IQR = {IQR_age:.2f}')
+print(f'Нижняя граница = {lower_age:.2f}')
+print(f'Верхняя граница = {upper_age:.2f}')
+if age_anomalies:
+    for row in age_anomalies:
+        print(row)
+else:
+    print('Аномалий по возрасту не найдено.')
+plt.figure(figsize=(12, 6))
+plt.hist(ages, bins=15, edgecolor='black', alpha=0.7)
+plt.axvline(lower_age, linestyle='--', linewidth=2, label='Нижняя граница')
+plt.axvline(upper_age, linestyle='--', linewidth=2, label='Верхняя граница')
+plt.axvline(np.mean(ages), linestyle='-', linewidth=2, label='Средний возраст')
+plt.xlabel('Возраст')
+plt.ylabel('Количество пользователей')
+plt.title('Аномалии по возрасту пользователей')
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+# 3. Аномалии по количеству заказов на пользователя
+cursor.execute('''
+SELECT u.id, u.first_name, u.last_name, u.city, COUNT(o.id) AS order_count
+FROM Users u
+LEFT JOIN Orders o ON u.id = o.user_id
+GROUP BY u.id
+ORDER BY order_count DESC
+''')
+user_orders = cursor.fetchall()
+order_counts = [row[4] for row in user_orders]
+Q1_orders = np.percentile(order_counts, 25)
+Q3_orders = np.percentile(order_counts, 75)
+IQR_orders = Q3_orders - Q1_orders
+upper_orders = Q3_orders + 1.5 * IQR_orders
+active_anomalies = [row for row in user_orders if row[4] > upper_orders]
+zero_orders = [row for row in user_orders if row[4] == 0]
+print('\n3) Аномалии по количеству заказов')
+print(f'Верхняя граница аномалии = {upper_orders:.2f}')
+print('Аномально активные пользователи:')
+if active_anomalies:
+    for row in active_anomalies:
+        print(row)
+else:
+    print('Аномально активных пользователей не найдено.')
+print('Пользователи без заказов:', len(zero_orders))
+plt.figure(figsize=(12, 6))
+plt.hist(order_counts, bins=15, edgecolor='black', alpha=0.7)
+plt.axvline(upper_orders, linestyle='--', linewidth=2, label='Граница аномалии')
+plt.axvline(np.mean(order_counts), linestyle='-', linewidth=2, label='Среднее')
+plt.xlabel('Количество заказов')
+plt.ylabel('Количество пользователей')
+plt.title('Аномалии по количеству заказов на пользователя')
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+# 4. Аномалии по городам
+cursor.execute('SELECT city, COUNT(*) AS users_count FROM Users GROUP BY city ORDER BY users_count DESC')
+city_data = cursor.fetchall()
+city_counts = [row[1] for row in city_data]
+Q1_city = np.percentile(city_counts, 25)
+Q3_city = np.percentile(city_counts, 75)
+IQR_city = Q3_city - Q1_city
+upper_city = Q3_city + 1.5 * IQR_city
+city_anomalies = [row for row in city_data if row[1] > upper_city]
+print('\n4) Аномалии по городам')
+print(f'Верхняя граница аномалии = {upper_city:.2f}')
+print('Города с аномально большим количеством пользователей:')
+if city_anomalies:
+    for row in city_anomalies:
+        print(row)
+else:
+    print('Аномальных городов не найдено.')
+plt.figure(figsize=(14, 6))
+plt.bar([row[0] for row in city_data], [row[1] for row in city_data])
+plt.axhline(upper_city, linestyle='--', linewidth=2, label='Граница аномалии')
+plt.xlabel('Город')
+plt.ylabel('Количество пользователей')
+plt.title('Количество пользователей по городам')
+plt.xticks(rotation=45, ha='right')
+plt.legend()
+plt.grid(True, axis='y')
+plt.tight_layout()
+plt.show()
+
+# 5. Ночные заказы
+cursor.execute('''
+SELECT o.id, o.order_number, u.first_name, u.last_name,
+       CAST(strftime('%H', o.order_date) AS INTEGER) AS hour,
+       o.order_date
+FROM Orders o
+JOIN Users u ON o.user_id = u.id
+ORDER BY hour
+''')
+orders = cursor.fetchall()
+night_hours = [23, 0, 1, 2, 3, 4, 5]
+night_orders = [row for row in orders if row[4] in night_hours]
+hour_counter = Counter([row[4] for row in orders])
+hours = list(range(24))
+hour_counts = [hour_counter.get(hour, 0) for hour in hours]
+print('\n5) Ночные заказы')
+print('Всего заказов:', len(orders))
+print('Ночных заказов:', len(night_orders))
+if len(orders) > 0:
+    print(f'Доля ночных заказов: {len(night_orders) / len(orders) * 100:.1f}%')
+for row in night_orders:
+    print(row)
+plt.figure(figsize=(12, 6))
+plt.bar(hours, hour_counts)
+plt.xlabel('Час суток')
+plt.ylabel('Количество заказов')
+plt.title('Распределение заказов по часам суток')
+plt.xticks(range(0, 24, 1))
+plt.grid(True, axis='y')
+plt.tight_layout()
+plt.show()
+
+# 6. Аномалии по месяцам регистрации
+cursor.execute("SELECT strftime('%Y-%m', registration_date) AS month, COUNT(*) AS reg_count FROM Users GROUP BY month ORDER BY month")
+registration_months = cursor.fetchall()
+reg_month_names = [row[0] for row in registration_months]
+reg_counts = [row[1] for row in registration_months]
+mean_reg = np.mean(reg_counts)
+std_reg = np.std(reg_counts)
+upper_reg = mean_reg + 2 * std_reg
+lower_reg = mean_reg - 2 * std_reg
+reg_anomalies = [(month, count) for month, count in registration_months if count > upper_reg or count < lower_reg]
+print('\n6) Аномалии по месяцам регистрации')
+print(f'Среднее = {mean_reg:.2f}, стандартное отклонение = {std_reg:.2f}')
+if reg_anomalies:
+    for row in reg_anomalies:
+        print(row)
+else:
+    print('Аномальных месяцев регистрации не найдено.')
+plt.figure(figsize=(12, 6))
+plt.plot(reg_month_names, reg_counts, marker='o')
+plt.axhline(mean_reg, linestyle='-', linewidth=2, label='Среднее')
+plt.axhline(upper_reg, linestyle='--', linewidth=2, label='Верхняя граница')
+plt.axhline(lower_reg, linestyle='--', linewidth=2, label='Нижняя граница')
+plt.xlabel('Месяц регистрации')
+plt.ylabel('Количество регистраций')
+plt.title('Аномалии по месяцам регистрации пользователей')
+plt.xticks(rotation=45)
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+# 7. Аномалии по месяцам заказов
+cursor.execute("SELECT strftime('%Y-%m', order_date) AS month, COUNT(*) AS orders_count FROM Orders GROUP BY month ORDER BY month")
+order_months = cursor.fetchall()
+order_month_names = [row[0] for row in order_months]
+month_order_counts = [row[1] for row in order_months]
+mean_orders_month = np.mean(month_order_counts)
+std_orders_month = np.std(month_order_counts)
+upper_orders_month = mean_orders_month + 2 * std_orders_month
+lower_orders_month = mean_orders_month - 2 * std_orders_month
+order_month_anomalies = [(month, count) for month, count in order_months if count > upper_orders_month or count < lower_orders_month]
+print('\n7) Аномалии по месяцам заказов')
+print(f'Среднее = {mean_orders_month:.2f}, стандартное отклонение = {std_orders_month:.2f}')
+if order_month_anomalies:
+    for row in order_month_anomalies:
+        print(row)
+else:
+    print('Аномальных месяцев заказов не найдено.')
+plt.figure(figsize=(12, 6))
+plt.plot(order_month_names, month_order_counts, marker='o')
+plt.axhline(mean_orders_month, linestyle='-', linewidth=2, label='Среднее')
+plt.axhline(upper_orders_month, linestyle='--', linewidth=2, label='Верхняя граница')
+plt.axhline(lower_orders_month, linestyle='--', linewidth=2, label='Нижняя граница')
+plt.xlabel('Месяц заказа')
+plt.ylabel('Количество заказов')
+plt.title('Аномалии по месяцам совершения заказов')
+plt.xticks(rotation=45)
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+print('\nОБЩИЙ ВЫВОД:')
+print('В лабораторной работе были выявлены возможные аномалии в данных.')
+print('Проверялись зарплаты, возраст, количество заказов, города, ночные заказы, месяцы регистрации и месяцы заказов.')
+conn.close()
+print('\nЛабораторная работа №8 выполнена успешно!')
