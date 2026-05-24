@@ -1,0 +1,88 @@
+import sqlite3
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+
+# Лабораторная работа №5
+# Когортный анализ данных (удержание пользователей)
+
+conn = sqlite3.connect('database.db')
+
+query = '''
+WITH user_cohorts AS (
+    SELECT 
+        id as user_id,
+        STRFTIME('%Y-%m', registration_date) AS cohort_month
+    FROM Users
+),
+user_orders AS (
+    SELECT 
+        u.user_id,
+        u.cohort_month,
+        (STRFTIME('%Y', o.order_date) - STRFTIME('%Y', u.cohort_month || '-01')) * 12 +
+        (STRFTIME('%m', o.order_date) - STRFTIME('%m', u.cohort_month || '-01')) AS month_number
+    FROM user_cohorts u
+    JOIN Orders o ON u.user_id = o.user_id
+),
+cohort_size AS (
+    SELECT 
+        cohort_month,
+        COUNT(DISTINCT user_id) AS users_in_cohort
+    FROM user_cohorts
+    GROUP BY cohort_month
+)
+
+SELECT 
+    uo.cohort_month,
+    cs.users_in_cohort,
+    uo.month_number,
+    COUNT(DISTINCT uo.user_id) AS active_users,
+    ROUND(COUNT(DISTINCT uo.user_id) * 100.0 / cs.users_in_cohort, 1) AS retention_rate
+FROM user_orders uo
+JOIN cohort_size cs ON uo.cohort_month = cs.cohort_month
+GROUP BY uo.cohort_month, uo.month_number
+ORDER BY uo.cohort_month, uo.month_number
+'''
+
+df = pd.read_sql_query(query, conn)
+
+# Создаем таблицу удержания
+pivot_df = df.pivot_table(
+    values='retention_rate',
+    index='cohort_month',
+    columns='month_number',
+    fill_value=0
+)
+
+print("Когортный анализ (удержание):")
+print(pivot_df)
+
+# Построение тепловой карты
+plt.figure(figsize=(10,6))
+plt.imshow(pivot_df)
+
+plt.xticks(range(len(pivot_df.columns)), pivot_df.columns)
+plt.yticks(range(len(pivot_df.index)), pivot_df.index)
+
+plt.xlabel("Месяц после регистрации")
+plt.ylabel("Когорта (месяц регистрации)")
+plt.title("Когортный анализ удержания (%)")
+
+# Подписи внутри
+for i in range(len(pivot_df.index)):
+    for j in range(len(pivot_df.columns)):
+        val = pivot_df.iloc[i, j]
+        if val > 0:
+            plt.text(j, i, f"{val}%", ha='center', va='center')
+
+plt.colorbar()
+plt.tight_layout()
+plt.show()
+
+# Анализ
+print("\nАнализ:")
+print("Когортный анализ показывает, сколько пользователей возвращаются и делают заказы.")
+print("Чем выше процент, тем лучше удержание пользователей.")
+
+conn.close()
+print("Лабораторная работа №5 выполнена!")
