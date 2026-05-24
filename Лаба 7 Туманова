@@ -1,0 +1,279 @@
+import sqlite3
+
+# Лабораторная работа №7
+# Текстовый анализ данных.
+# Перед запуском должна быть создана и заполнена база database.db из лабораторной №1.
+
+conn = sqlite3.connect('database.db')
+cursor = conn.cursor()
+
+print("=== ЛАБОРАТОРНАЯ РАБОТА №7 ===")
+
+# ---------------------------------------------------------
+# 1. Статистика длин имён и фамилий
+# ---------------------------------------------------------
+
+print("\n1) Длина имени и фамилии пользователей:")
+
+cursor.execute('''
+SELECT
+    first_name,
+    last_name,
+    LENGTH(first_name) AS first_name_length,
+    LENGTH(last_name) AS last_name_length,
+    LENGTH(first_name) + LENGTH(last_name) AS total_length
+FROM Users
+ORDER BY total_length DESC
+LIMIT 10
+''')
+
+for row in cursor.fetchall():
+    print(row)
+
+# ---------------------------------------------------------
+# 2. Количество мужчин и женщин
+# ---------------------------------------------------------
+
+print("\n2) Количество пользователей мужчин и женщин:")
+
+cursor.execute('''
+SELECT
+    gender,
+    COUNT(*) AS users_count
+FROM Users
+GROUP BY gender
+''')
+
+for row in cursor.fetchall():
+    print(row)
+
+# ---------------------------------------------------------
+# 3. Количество пользователей, фамилия которых заканчивается на «ов»
+# ---------------------------------------------------------
+
+print("\n3) Количество пользователей с фамилией на «ов»:")
+
+cursor.execute('''
+SELECT COUNT(*)
+FROM Users
+WHERE last_name LIKE '%ов'
+''')
+
+print(cursor.fetchone()[0])
+
+# ---------------------------------------------------------
+# 4. Количество пользователей, фамилия которых заканчивается на «ова»
+# ---------------------------------------------------------
+
+print("\n4) Количество пользователей с фамилией на «ова»:")
+
+cursor.execute('''
+SELECT COUNT(*)
+FROM Users
+WHERE last_name LIKE '%ова'
+''')
+
+print(cursor.fetchone()[0])
+
+# ---------------------------------------------------------
+# 5. Пользователи из городов, где есть буква «а»
+# ---------------------------------------------------------
+
+print("\n5) Пользователи из городов, названия которых содержат букву «а»:")
+
+cursor.execute('''
+SELECT
+    id,
+    first_name,
+    last_name,
+    city
+FROM Users
+WHERE city LIKE '%а%' OR city LIKE '%А%'
+ORDER BY city
+''')
+
+city_users = cursor.fetchall()
+
+print("Количество таких пользователей:", len(city_users))
+for row in city_users:
+    print(row)
+
+# ---------------------------------------------------------
+# 6. Изменение регистра первого символа профессии
+# ---------------------------------------------------------
+# В Python с русскими буквами это работает надёжнее, чем через SQLite.
+# Поэтому данные сначала читаются из базы, затем обновляются.
+
+print("\n6) Меняем регистр первого символа профессии на противоположный:")
+
+cursor.execute("SELECT id, profession FROM Users")
+professions = cursor.fetchall()
+
+for user_id, profession in professions:
+    if profession:
+        first_symbol = profession[0]
+        other_symbols = profession[1:]
+
+        if first_symbol.isupper():
+            new_profession = first_symbol.lower() + other_symbols
+        else:
+            new_profession = first_symbol.upper() + other_symbols
+
+        cursor.execute('''
+        UPDATE Users
+        SET profession = ?
+        WHERE id = ?
+        ''', (new_profession, user_id))
+
+conn.commit()
+
+cursor.execute('''
+SELECT
+    id,
+    first_name,
+    last_name,
+    profession
+FROM Users
+ORDER BY id
+LIMIT 15
+''')
+
+for row in cursor.fetchall():
+    print(row)
+
+# ---------------------------------------------------------
+# 7. Изменение фамилий нескольких пользователей
+# ---------------------------------------------------------
+
+print("\n7) Меняем фамилии нескольких пользователей:")
+
+updates = [
+    ('Соколова', 2),
+    ('Миронов', 3),
+    ('Орлова', 4),
+    ('Фролов', 5),
+    ('Крылова', 6)
+]
+
+cursor.executemany('''
+UPDATE Users
+SET last_name = ?
+WHERE id = ?
+''', updates)
+
+conn.commit()
+
+cursor.execute('''
+SELECT
+    id,
+    first_name,
+    last_name
+FROM Users
+WHERE id IN (2, 3, 4, 5, 6)
+ORDER BY id
+''')
+
+for row in cursor.fetchall():
+    print(row)
+
+# ---------------------------------------------------------
+# 8. Продукты, названия которых оканчиваются на гласную букву
+# ---------------------------------------------------------
+
+print("\n8) Продукты, названия которых оканчиваются на гласную букву:")
+
+vowels = ('а', 'е', 'ё', 'и', 'о', 'у', 'ы', 'э', 'ю', 'я')
+
+cursor.execute('''
+SELECT
+    id,
+    name,
+    price
+FROM Products
+ORDER BY id
+''')
+
+products = cursor.fetchall()
+
+products_vowel = []
+products_consonant = []
+
+for product_id, name, price in products:
+    last_letter = name[-1].lower()
+    if last_letter in vowels:
+        products_vowel.append((product_id, name, price))
+    else:
+        products_consonant.append((product_id, name, price))
+
+print("Количество:", len(products_vowel))
+for row in products_vowel:
+    print(row)
+
+# ---------------------------------------------------------
+# 9. Продукты, названия которых оканчиваются на согласную букву
+# ---------------------------------------------------------
+
+print("\n9) Продукты, названия которых оканчиваются на согласную букву:")
+
+print("Количество:", len(products_consonant))
+for row in products_consonant:
+    print(row)
+
+# ---------------------------------------------------------
+# 10. Пользователи в формате: Фамилия И.О.
+# ---------------------------------------------------------
+
+print("\n10) Пользователи в формате: Фамилия И.О.")
+
+cursor.execute('''
+SELECT
+    last_name || ' ' || SUBSTR(first_name, 1, 1) || '.' AS short_name
+FROM Users
+ORDER BY last_name
+LIMIT 30
+''')
+
+for row in cursor.fetchall():
+    print(row[0])
+
+# ---------------------------------------------------------
+# 11. Дополнительные текстовые SQL-запросы
+# ---------------------------------------------------------
+
+print("\n11) Города в разных регистрах:")
+
+cursor.execute('''
+SELECT DISTINCT
+    city AS original_city,
+    UPPER(city) AS upper_city,
+    LOWER(city) AS lower_city
+FROM Users
+LIMIT 15
+''')
+
+for row in cursor.fetchall():
+    print(row)
+
+print("\n12) Объединение строк: ФИО, город и профессия:")
+
+cursor.execute('''
+SELECT
+    first_name || ' ' || last_name AS full_name,
+    city || ', ' || profession AS city_profession
+FROM Users
+ORDER BY id
+LIMIT 15
+''')
+
+for row in cursor.fetchall():
+    print(row)
+
+print("\nОБЩИЙ ВЫВОД:")
+print("В лабораторной работе был выполнен текстовый анализ данных.")
+print("Были использованы функции LENGTH, SUBSTR, UPPER, LOWER, LIKE и конкатенация строк.")
+print("Также были выполнены UPDATE-запросы для изменения текстовых данных в таблице Users.")
+
+conn.commit()
+conn.close()
+
+print("\nЛабораторная работа №7 выполнена успешно!")
