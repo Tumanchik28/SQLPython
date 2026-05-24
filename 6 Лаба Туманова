@@ -1,0 +1,324 @@
+import sqlite3
+import matplotlib.pyplot as plt
+import pandas as pd
+import numpy as np
+
+# Лабораторная работа №6
+# Когортный анализ данных. Накопительный итог. Возвращаемость.
+# Перед запуском должна быть создана и заполнена база database.db из лабораторной №1.
+
+conn = sqlite3.connect('database.db')
+
+print("=== ЛАБОРАТОРНАЯ РАБОТА №6 ===")
+
+# ---------------------------------------------------------
+# 1. Когортный анализ по накопительному итогу заказов
+# ---------------------------------------------------------
+
+query_cumulative = '''
+WITH user_cohorts AS (
+    SELECT 
+        id AS user_id,
+        STRFTIME('%Y-%m', registration_date) AS cohort_month
+    FROM Users
+),
+user_orders AS (
+    SELECT 
+        uc.cohort_month,
+        o.id AS order_id,
+        (STRFTIME('%Y', o.order_date) - STRFTIME('%Y', uc.cohort_month || '-01')) * 12 +
+        (STRFTIME('%m', o.order_date) - STRFTIME('%m', uc.cohort_month || '-01')) AS month_from_reg
+    FROM user_cohorts uc
+    JOIN Orders o ON uc.user_id = o.user_id
+    WHERE o.order_date IS NOT NULL
+)
+SELECT 
+    cohort_month,
+    month_from_reg,
+    COUNT(order_id) AS orders_in_month,
+    SUM(COUNT(order_id)) OVER (
+        PARTITION BY cohort_month
+        ORDER BY month_from_reg
+    ) AS cumulative_orders
+FROM user_orders
+GROUP BY cohort_month, month_from_reg
+ORDER BY cohort_month, month_from_reg
+'''
+
+df_cumulative = pd.read_sql_query(query_cumulative, conn)
+
+print("\n1) Накопительный итог заказов по когортам:")
+print(df_cumulative)
+
+plt.figure(figsize=(12, 6))
+
+for cohort in sorted(df_cumulative['cohort_month'].unique()):
+    cohort_data = df_cumulative[df_cumulative['cohort_month'] == cohort]
+    plt.plot(
+        cohort_data['month_from_reg'],
+        cohort_data['cumulative_orders'],
+        marker='o',
+        label=cohort
+    )
+
+plt.xlabel('Месяц после регистрации')
+plt.ylabel('Накопительное количество заказов')
+plt.title('Накопительный итог заказов по когортам')
+plt.legend(title='Когорта')
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+# ---------------------------------------------------------
+# 2. Накопительный итог для мужчин
+# ---------------------------------------------------------
+
+query_male = '''
+WITH user_cohorts AS (
+    SELECT 
+        id AS user_id,
+        STRFTIME('%Y-%m', registration_date) AS cohort_month
+    FROM Users
+    WHERE gender = 'Male'
+),
+user_orders AS (
+    SELECT 
+        uc.cohort_month,
+        o.id AS order_id,
+        (STRFTIME('%Y', o.order_date) - STRFTIME('%Y', uc.cohort_month || '-01')) * 12 +
+        (STRFTIME('%m', o.order_date) - STRFTIME('%m', uc.cohort_month || '-01')) AS month_from_reg
+    FROM user_cohorts uc
+    JOIN Orders o ON uc.user_id = o.user_id
+)
+SELECT 
+    cohort_month,
+    month_from_reg,
+    COUNT(order_id) AS orders_in_month,
+    SUM(COUNT(order_id)) OVER (
+        PARTITION BY cohort_month
+        ORDER BY month_from_reg
+    ) AS cumulative_orders
+FROM user_orders
+GROUP BY cohort_month, month_from_reg
+ORDER BY cohort_month, month_from_reg
+'''
+
+df_male = pd.read_sql_query(query_male, conn)
+
+print("\n2) Накопительный итог заказов у мужчин:")
+print(df_male)
+
+plt.figure(figsize=(12, 6))
+
+for cohort in sorted(df_male['cohort_month'].unique()):
+    cohort_data = df_male[df_male['cohort_month'] == cohort]
+    plt.plot(
+        cohort_data['month_from_reg'],
+        cohort_data['cumulative_orders'],
+        marker='o',
+        label=cohort
+    )
+
+plt.xlabel('Месяц после регистрации')
+plt.ylabel('Накопительное количество заказов')
+plt.title('Накопительный итог заказов у мужчин')
+plt.legend(title='Когорта')
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+# ---------------------------------------------------------
+# 3. Накопительный итог для женщин
+# ---------------------------------------------------------
+
+query_female = '''
+WITH user_cohorts AS (
+    SELECT 
+        id AS user_id,
+        STRFTIME('%Y-%m', registration_date) AS cohort_month
+    FROM Users
+    WHERE gender = 'Female'
+),
+user_orders AS (
+    SELECT 
+        uc.cohort_month,
+        o.id AS order_id,
+        (STRFTIME('%Y', o.order_date) - STRFTIME('%Y', uc.cohort_month || '-01')) * 12 +
+        (STRFTIME('%m', o.order_date) - STRFTIME('%m', uc.cohort_month || '-01')) AS month_from_reg
+    FROM user_cohorts uc
+    JOIN Orders o ON uc.user_id = o.user_id
+)
+SELECT 
+    cohort_month,
+    month_from_reg,
+    COUNT(order_id) AS orders_in_month,
+    SUM(COUNT(order_id)) OVER (
+        PARTITION BY cohort_month
+        ORDER BY month_from_reg
+    ) AS cumulative_orders
+FROM user_orders
+GROUP BY cohort_month, month_from_reg
+ORDER BY cohort_month, month_from_reg
+'''
+
+df_female = pd.read_sql_query(query_female, conn)
+
+print("\n3) Накопительный итог заказов у женщин:")
+print(df_female)
+
+plt.figure(figsize=(12, 6))
+
+for cohort in sorted(df_female['cohort_month'].unique()):
+    cohort_data = df_female[df_female['cohort_month'] == cohort]
+    plt.plot(
+        cohort_data['month_from_reg'],
+        cohort_data['cumulative_orders'],
+        marker='o',
+        label=cohort
+    )
+
+plt.xlabel('Месяц после регистрации')
+plt.ylabel('Накопительное количество заказов')
+plt.title('Накопительный итог заказов у женщин')
+plt.legend(title='Когорта')
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+# ---------------------------------------------------------
+# 4. Накопительный итог по профессии
+# ---------------------------------------------------------
+
+profession_name = 'Учитель'
+
+query_profession = f'''
+WITH user_cohorts AS (
+    SELECT 
+        id AS user_id,
+        STRFTIME('%Y-%m', registration_date) AS cohort_month
+    FROM Users
+    WHERE profession = '{profession_name}'
+),
+user_orders AS (
+    SELECT 
+        uc.cohort_month,
+        o.id AS order_id,
+        (STRFTIME('%Y', o.order_date) - STRFTIME('%Y', uc.cohort_month || '-01')) * 12 +
+        (STRFTIME('%m', o.order_date) - STRFTIME('%m', uc.cohort_month || '-01')) AS month_from_reg
+    FROM user_cohorts uc
+    JOIN Orders o ON uc.user_id = o.user_id
+)
+SELECT 
+    cohort_month,
+    month_from_reg,
+    COUNT(order_id) AS orders_in_month,
+    SUM(COUNT(order_id)) OVER (
+        PARTITION BY cohort_month
+        ORDER BY month_from_reg
+    ) AS cumulative_orders
+FROM user_orders
+GROUP BY cohort_month, month_from_reg
+ORDER BY cohort_month, month_from_reg
+'''
+
+df_profession = pd.read_sql_query(query_profession, conn)
+
+print(f"\n4) Накопительный итог заказов по профессии: {profession_name}")
+print(df_profession)
+
+if len(df_profession) > 0:
+    plt.figure(figsize=(12, 6))
+
+    for cohort in sorted(df_profession['cohort_month'].unique()):
+        cohort_data = df_profession[df_profession['cohort_month'] == cohort]
+        plt.plot(
+            cohort_data['month_from_reg'],
+            cohort_data['cumulative_orders'],
+            marker='o',
+            label=cohort
+        )
+
+    plt.xlabel('Месяц после регистрации')
+    plt.ylabel('Накопительное количество заказов')
+    plt.title(f'Накопительный итог заказов по профессии: {profession_name}')
+    plt.legend(title='Когорта')
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+else:
+    print("По выбранной профессии заказов не найдено.")
+
+# ---------------------------------------------------------
+# 5. Анализ возвращаемости пользователей по профессиям
+# ---------------------------------------------------------
+
+query_returning = '''
+WITH user_orders_stats AS (
+    SELECT 
+        u.profession,
+        u.id AS user_id,
+        COUNT(o.id) AS total_orders,
+        CASE 
+            WHEN COUNT(o.id) >= 2 THEN 1
+            ELSE 0
+        END AS is_returning
+    FROM Users u
+    LEFT JOIN Orders o ON u.id = o.user_id
+    GROUP BY u.profession, u.id
+)
+SELECT
+    profession,
+    COUNT(user_id) AS total_users,
+    COUNT(CASE WHEN total_orders > 0 THEN user_id END) AS users_with_orders,
+    SUM(total_orders) AS total_orders,
+    SUM(is_returning) AS returning_users,
+    ROUND(AVG(total_orders), 2) AS avg_orders_per_user,
+    ROUND(
+        100.0 * SUM(is_returning) /
+        NULLIF(COUNT(CASE WHEN total_orders > 0 THEN user_id END), 0),
+        1
+    ) AS returning_rate
+FROM user_orders_stats
+GROUP BY profession
+HAVING users_with_orders > 0
+ORDER BY returning_rate DESC
+'''
+
+df_returning = pd.read_sql_query(query_returning, conn)
+
+print("\n5) Возвращаемость пользователей по профессиям:")
+print(df_returning)
+
+plt.figure(figsize=(14, 6))
+plt.bar(df_returning['profession'], df_returning['returning_rate'])
+plt.xlabel('Профессия')
+plt.ylabel('Возвращаемость (%)')
+plt.title('Процент пользователей, совершивших повторный заказ')
+plt.xticks(rotation=45, ha='right')
+plt.grid(True, axis='y')
+plt.tight_layout()
+plt.show()
+
+plt.figure(figsize=(14, 6))
+plt.bar(df_returning['profession'], df_returning['avg_orders_per_user'])
+plt.xlabel('Профессия')
+plt.ylabel('Среднее количество заказов')
+plt.title('Среднее количество заказов на пользователя по профессиям')
+plt.xticks(rotation=45, ha='right')
+plt.grid(True, axis='y')
+plt.tight_layout()
+plt.show()
+
+# ---------------------------------------------------------
+# Итоговый вывод
+# ---------------------------------------------------------
+
+print("\nОБЩИЙ ВЫВОД:")
+print("В лабораторной работе был выполнен когортный анализ по накопительному итогу.")
+print("Накопительный итог показывает, как суммарно растёт количество заказов у пользователей разных когорт.")
+print("Также была рассчитана возвращаемость пользователей: доля тех, кто сделал повторный заказ.")
+print("Такая аналитика помогает понять, какие группы пользователей активнее и какие профессии чаще возвращаются за повторными покупками.")
+
+conn.close()
+
+print("\nЛабораторная работа №6 выполнена успешно!")
