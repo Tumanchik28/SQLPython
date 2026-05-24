@@ -1,0 +1,260 @@
+import sqlite3
+import matplotlib.pyplot as plt
+import numpy as np
+from datetime import datetime
+from collections import defaultdict
+
+# Лабораторная работа №4
+# Анализ временных рядов.
+# Перед запуском должна быть создана и заполнена база database.db из лабораторной №1.
+
+conn = sqlite3.connect('database.db')
+cursor = conn.cursor()
+
+print("=== ЛАБОРАТОРНАЯ РАБОТА №4 ===")
+
+# ---------------------------------------------------------
+# 1. Тренд заказов по полу пользователей
+# ---------------------------------------------------------
+
+cursor.execute('''
+SELECT date(o.order_date), u.gender, COUNT(*)
+FROM Orders o
+JOIN Users u ON o.user_id = u.id
+GROUP BY date(o.order_date), u.gender
+ORDER BY date(o.order_date)
+''')
+
+data = cursor.fetchall()
+
+dates = sorted(set(row[0] for row in data))
+female = {date: 0 for date in dates}
+male = {date: 0 for date in dates}
+
+for date, gender, count in data:
+    if gender == 'Female':
+        female[date] = count
+    elif gender == 'Male':
+        male[date] = count
+
+x = list(range(len(dates)))
+y_female = [female[date] for date in dates]
+y_male = [male[date] for date in dates]
+
+trend_female = np.polyfit(x, y_female, 1)
+trend_male = np.polyfit(x, y_male, 1)
+
+line_female = np.poly1d(trend_female)(x)
+line_male = np.poly1d(trend_male)(x)
+
+date_objects = [datetime.strptime(d, '%Y-%m-%d') for d in dates]
+
+plt.figure(figsize=(12, 6))
+plt.plot(date_objects, y_female, marker='o', label='Женщины')
+plt.plot(date_objects, y_male, marker='o', label='Мужчины')
+plt.plot(date_objects, line_female, linestyle='--', label=f'Тренд женщин ({trend_female[0]:.2f})')
+plt.plot(date_objects, line_male, linestyle='--', label=f'Тренд мужчин ({trend_male[0]:.2f})')
+plt.xlabel('Дата')
+plt.ylabel('Количество заказов')
+plt.title('Заказы по полу пользователей с линиями тренда')
+plt.legend()
+plt.grid(True)
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+
+print("\n1) Анализ заказов по полу:")
+if trend_female[0] > trend_male[0]:
+    print("Интерес у женщин растёт быстрее, поэтому с точки зрения бизнеса можно ориентироваться на женскую аудиторию.")
+elif trend_male[0] > trend_female[0]:
+    print("Интерес у мужчин растёт быстрее, поэтому с точки зрения бизнеса можно ориентироваться на мужскую аудиторию.")
+else:
+    print("Интерес у мужчин и женщин примерно одинаковый.")
+
+# ---------------------------------------------------------
+# 2. Тренды регистраций пользователей по профессиям
+# ---------------------------------------------------------
+
+cursor.execute('''
+SELECT strftime('%Y-%m', registration_date) AS reg_month,
+       profession,
+       COUNT(*)
+FROM Users
+GROUP BY reg_month, profession
+ORDER BY reg_month
+''')
+
+prof_data = cursor.fetchall()
+
+months = sorted(set(row[0] for row in prof_data))
+professions = sorted(set(row[1] for row in prof_data))
+
+plt.figure(figsize=(14, 7))
+
+for profession in professions:
+    y = []
+    for month in months:
+        count = 0
+        for row_month, row_profession, row_count in prof_data:
+            if row_month == month and row_profession == profession:
+                count = row_count
+        y.append(count)
+
+    if sum(y) > 1:
+        x_prof = list(range(len(months)))
+        trend = np.polyfit(x_prof, y, 1)
+        line = np.poly1d(trend)(x_prof)
+        plt.plot(months, y, marker='o', label=profession)
+        plt.plot(months, line, linestyle='--')
+
+plt.xlabel('Месяц регистрации')
+plt.ylabel('Количество пользователей')
+plt.title('Тренды регистрации пользователей по профессиям')
+plt.xticks(rotation=45)
+plt.legend(fontsize=8)
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+print("\n2) Построен график трендов регистраций пользователей по профессиям.")
+
+# ---------------------------------------------------------
+# 3. Тренды регистраций по возрасту: юные и взрослые
+# Юные — до 30 лет включительно, взрослые — старше 30 лет
+# ---------------------------------------------------------
+
+cursor.execute('''
+SELECT strftime('%Y-%m', registration_date) AS reg_month,
+       CASE
+           WHEN age <= 30 THEN 'Юные'
+           ELSE 'Взрослые'
+       END AS age_group,
+       COUNT(*)
+FROM Users
+GROUP BY reg_month, age_group
+ORDER BY reg_month
+''')
+
+age_data = cursor.fetchall()
+
+months_age = sorted(set(row[0] for row in age_data))
+age_groups = ['Юные', 'Взрослые']
+
+plt.figure(figsize=(12, 6))
+
+for group in age_groups:
+    y = []
+    for month in months_age:
+        count = 0
+        for row_month, row_group, row_count in age_data:
+            if row_month == month and row_group == group:
+                count = row_count
+        y.append(count)
+
+    x_age = list(range(len(months_age)))
+    trend = np.polyfit(x_age, y, 1)
+    line = np.poly1d(trend)(x_age)
+
+    plt.plot(months_age, y, marker='o', label=group)
+    plt.plot(months_age, line, linestyle='--', label=f'Тренд: {group} ({trend[0]:.2f})')
+
+plt.xlabel('Месяц регистрации')
+plt.ylabel('Количество регистраций')
+plt.title('Тренды регистраций по возрастным группам')
+plt.xticks(rotation=45)
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+print("\n3) Анализ регистраций по возрасту:")
+print("Пользователи разделены на две группы: юные до 30 лет включительно и взрослые старше 30 лет.")
+
+# ---------------------------------------------------------
+# 4. Тренды продаж конкретных продуктов
+# ---------------------------------------------------------
+
+cursor.execute('''
+SELECT strftime('%Y-%m', o.order_date) AS order_month,
+       p.name,
+       COUNT(*)
+FROM Orders o
+JOIN Products p ON o.product_id = p.id
+GROUP BY order_month, p.name
+ORDER BY order_month
+''')
+
+product_data = cursor.fetchall()
+
+order_months = sorted(set(row[0] for row in product_data))
+products = sorted(set(row[1] for row in product_data))
+
+# Берём продукты, которые встречались в заказах чаще всего
+cursor.execute('''
+SELECT p.name, COUNT(*) AS order_count
+FROM Orders o
+JOIN Products p ON o.product_id = p.id
+GROUP BY p.name
+ORDER BY order_count DESC
+LIMIT 6
+''')
+
+top_products = [row[0] for row in cursor.fetchall()]
+
+plt.figure(figsize=(14, 7))
+
+product_trends = []
+
+for product in top_products:
+    y = []
+    for month in order_months:
+        count = 0
+        for row_month, row_product, row_count in product_data:
+            if row_month == month and row_product == product:
+                count = row_count
+        y.append(count)
+
+    x_product = list(range(len(order_months)))
+    trend = np.polyfit(x_product, y, 1)
+    line = np.poly1d(trend)(x_product)
+
+    product_trends.append((product, trend[0]))
+
+    plt.plot(order_months, y, marker='o', label=product)
+    plt.plot(order_months, line, linestyle='--')
+
+plt.xlabel('Месяц заказа')
+plt.ylabel('Количество продаж')
+plt.title('Тренды продаж популярных продуктов')
+plt.xticks(rotation=45)
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+print("\n4) Анализ продаж продуктов:")
+product_trends_sorted = sorted(product_trends, key=lambda x: x[1])
+
+print("Тренды продаж продуктов:")
+for product, trend_value in product_trends_sorted:
+    print(f"{product}: тренд {trend_value:.2f}")
+
+print("\nОтвет на вопрос: «На какие продукты увеличить скидку?»")
+print("Скидку лучше увеличить на продукты с самым низким или отрицательным трендом продаж.")
+print("По построенному графику и расчёту это товары:")
+
+for product, trend_value in product_trends_sorted[:3]:
+    print(f"- {product}")
+
+# ---------------------------------------------------------
+# Итоговый вывод
+# ---------------------------------------------------------
+
+print("\nОБЩИЙ ВЫВОД:")
+print("В лабораторной работе были построены графики временных рядов и линии тренда.")
+print("По графикам можно оценить, растёт ли интерес пользователей к системе.")
+print("Также можно определить, какие группы пользователей и товары являются более перспективными для бизнеса.")
+
+conn.close()
+
+print("\nЛабораторная работа №4 выполнена успешно!")
